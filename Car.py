@@ -11,5 +11,5 @@ class Car:
     def paint_job(self, new_color):
         self.color = new_color
 
-
-pickle.dump(Car(2015, 'brown', 'volvo'), open('car.pickle', 'wb'))
+    def info(self):
+        return f'{self.year} {self.color} {self.model}'
