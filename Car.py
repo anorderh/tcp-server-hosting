@@ -1,5 +1,6 @@
-import pickle
-
+"""
+Sample file containing Car object. Serialized & transferred between TCP client and server
+"""
 
 class Car:
 
