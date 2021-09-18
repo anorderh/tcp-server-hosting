@@ -1,22 +1,47 @@
+"""
+TCP Client program. Main method connects client socket and runs tests of int, str, serialized object,
+and JSON file.
+
+* DEV: Anthony Norderhaug, SDSU Mechatronics
+"""
 import socket
 import pickle
 import json
 import pathlib
-import messages
 import Car
-import threading
 
 PORT = 50000
-SERVER = socket.gethostbyname(socket.gethostname())
-HEADER = 16
+SERVER = 'localhost'
 FORMAT = 'utf-8'
 DISCONNECT = '!DISCONNECT'
 ADDRESS = (SERVER, PORT)
 HEADER_SIZE = 64
 
 
-def encode_length(msg):
+def encode_length_and_type(msg):
+    """
+    Adds header to message. Includes length. Includes file name if applicable
+    :param msg:     Any (non-serialized object code not applicable)
+    :return:        bytes, header and msg
+    """
+    file_name = ''
+    file_ext = pathlib.PurePath(str(msg)).suffix # gets extension, if present in str
+
+    if file_ext != '':
+        file_name = msg
+        if file_ext == '.json':     # JSON: creates obj, to str, to bytes
+            py_json = json.load(open(file_name, 'r'))
+            msg = json.dumps(py_json).encode(FORMAT)
+        elif file_ext == '.pickle':     # Pickle: creates obj to bytes
+            py_pickle = pickle.load(open(file_name, 'rb'))
+            msg = pickle.dumps(py_pickle)
+    else:
+        msg = str(msg).encode(FORMAT) # str to bytes
+
+    # FORMAT: length '#' file_name
     header = str(len(msg)).encode(FORMAT)
+    if file_name != '':
+        header += ('#' + file_name).encode(FORMAT)
 
     header += b' ' * (HEADER_SIZE - len(header))
     return header + msg
@@ -26,48 +51,42 @@ def decode_length():
     return int(client.recv(HEADER_SIZE).decode(FORMAT))
 
 
-def check(user_input):
-    file_ext = pathlib.PurePath(user_input).suffix
-    if file_ext != '':
-        return messages.Message(user_input, user_input)
-    else:
-        return messages.Message(user_input)
-
-
 def receive():
-    msg = pickle.loads(client.recv(decode_length()))
+    msg = client.recv(decode_length()).decode(FORMAT)
     print(f'{ADDRESS}: {msg}')
-
-    if msg == 'Disconnecting...':
-        return False
-    else:
-        return True
 
 
 if __name__ == '__main__':
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect(ADDRESS)
+    receive() # connection acknowledgement
 
-    while receive():
-        print("Send either a file or message.")
-        message_OBJ = check(input())
-        client.send(encode_length(pickle.dumps(message_OBJ)))
+    test = [1, "Hi server!", 'new_car.pickle', 'sample.json']
+
+    print("TEST CASE #1: Sending an int")
+    input()
+    client.send(encode_length_and_type(test[0]))
+    receive()
+
+    print("TEST CASE #2: Sending a str")
+    input()
+    client.send(encode_length_and_type(test[1]))
+    receive()
+
+    print("TEST CASE #3: Sending an object serialized in pickle file")
+    input()
+    pickle.dump(Car.Car('2015', 'grey', 'civic'), open(test[2], 'wb'))  # generating pickle file
+    client.send(encode_length_and_type(test[2]))
+    receive()
+
+    print("TEST CASE #4: Sending JSON")
+    input()
+    client.send(encode_length_and_type(test[3]))    # pre-existing json file
+    receive()
+
+    print("Testing DISCONNECT message")
+    input()
+    client.send(encode_length_and_type(DISCONNECT))     # disconnecting
+    receive()
 
     client.close()
-
-    # # test 1: sending an int
-    # client.send(str(453).encode(FORMAT))
-    # print(client.recv(1024).decode(FORMAT))
-    #
-    # # test 2: sending a str
-    # client.send('Hi server, how is your day going?'.encode(FORMAT))
-    # print(client.recv(1024).decode(FORMAT))
-    #
-    # # test 3: sending Object file in pickled byte representation
-    # pickle_bytes = pickle.dumps(Car('2015', 'grey', 'civic'))
-    # client.send(pickle_bytes)
-    #
-    # # test 4: creating json obj, then dumping obj into str, then sending string encoded
-    # json_obj = json.load(open('sample.json', 'r'))
-    # json_string = json.dumps(json_obj)
-    # client.send(json_string.encode(FORMAT))
